@@ -30,7 +30,7 @@ void connect_to_server(string server_ip, int server_port){
         struct sockaddr_in serv_addr;
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
         if (sockfd < 0){
-            error("ERROR opening socket");
+            error("error! opening socket\n");
             return;
         } 
             
@@ -39,14 +39,14 @@ void connect_to_server(string server_ip, int server_port){
         serv_addr.sin_port = htons(server_port);
         
         if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0){
-            error("ERROR connecting");
+            error("error! connecting\n");
             return;
         }
-        cout<<"connected to server";
+        cout<<"connected to server\n";
         is_connected_to_server=1; 
             
     }else{
-        cout<<"already connected to server";
+        cout<<"error! already connected to server\n";
         return;
     }
     
@@ -98,7 +98,7 @@ void perform_actions(string inp_buff){
 void interactive_mode(){
 	while(1){
 		string inp_buff;
-        cout<<"Enter the input:";
+        cout<<"Enter the input: ";
 		// cin>>inp_buff;
         getline(cin, inp_buff);
         cout<<inp_buff<<endl;
@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
     string argv1 = argv[1];
     cout<<"2"<<endl;
     if (argv1.compare("interactive") == 0){
-    	cout<<"interactive mode";
+    	cout<<"****interactive mode***\n";
         interactive_mode();
     }
     else if(argv1.compare("batch") == 0){
@@ -143,6 +143,7 @@ int main(int argc, char *argv[])
 	       exit(0);
 	    }
 	    filename=argv[2];
+        cout<<"****batch mode***\n";
         batch_mode(filename);
     }else{
     	error("invalid mode");

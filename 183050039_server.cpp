@@ -15,17 +15,22 @@
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 using namespace std;
 
-#define NO_OF_WORKERS 3
+#define MAX 1000
+#define NO_OF_WORKERS 1
 
-pthread_mutex_t mutex;
+
+int client_buffer[MAX];
+int current_count=0,consume_ptr=0,produce_ptr=0;
+int sockfd, portno, clilen;
+struct sockaddr_in serv_addr, cli_addr;
 map<int,string> KV_pair;
+pthread_cond_t empty,filled;
+pthread_mutex_t mutex;
 
-struct thread_data {
-    int sock_id;
-};
 
 void fill_map(map<int, string> &temp_map){
 	temp_map.insert ( std::pair<int,string>(10,"ten") );
@@ -82,58 +87,99 @@ void error(string msg)
 }
 
 
-void* serve_request(void* data){
-	struct thread_data *args=(struct thread_data*)data;
-  	int newsockfd = args->sock_id;
-  	cout<<newsockfd<<endl;
-  	cout<<"reached here\n";
-	while(1){
-		// int* newsockfd=(int*) data;
-		int status;
-		char buffer[1024] = {0};
-		status = read(newsockfd,buffer,1024);
-		if (status < 0) {
-			error("ERROR reading from socket");
+//add request to queue
+void *add_client_to_queue(void *data)
+{
+	
+
+	while(1)
+	{
+	  // down mutex
+		int newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, (socklen_t*) &clilen);
+		cout<<"accepted connection "<<newsockfd<<endl;
+		if (newsockfd < 0) 
+			error("error! on accept\n");
+		pthread_mutex_lock(&mutex);
+
+		while(current_count==MAX-1){
+			// sleep master waiting for an empty slot
+			printf("master waiting\n");
+			pthread_cond_wait(&empty, &mutex);
 		}
-		// cout<<"Here is the message: "<<buffer<<endl;
-		string ret_val;
-		stringstream ss(buffer);
-        vector<string> tokens{istream_iterator<string>{ss},
-                  istream_iterator<string>{}};
-        pthread_mutex_lock(&mutex);
-        if(tokens.front().compare("create")==0){
-        	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[3]);
 
-        }else if(tokens.front().compare("read")==0){
-        	ret_val=get_val_from_key(KV_pair,stoi(tokens[1]));
+		produce_ptr=(produce_ptr+1)%MAX;
+		client_buffer[produce_ptr]=newsockfd;
+		current_count++;
+		// up mutex
 
-        }else if(tokens.front().compare("update")==0){
-        	ret_val=update_value_for_key(KV_pair,stoi(tokens[1]),tokens[3]);
-
-        }else if(tokens.front().compare("delete")==0){
-        	ret_val=delete_key(KV_pair,stoi(tokens[1]));
-        }else if(tokens.front().compare("disconnect")==0){
-        	close(newsockfd);
-        	pthread_mutex_unlock(&mutex);
-        	break;
-        }
-        pthread_mutex_unlock(&mutex);
-		cout<<"writing to socket\n";
-		status = write(newsockfd,ret_val.c_str(),ret_val.length());
-		
-		if (status < 0) error("ERROR writing to socket");
+		pthread_cond_signal(&filled); 
+		pthread_mutex_unlock(&mutex);
 	}
-	cout<<"disconnected"<<newsockfd<<endl;
+
+}
+
+void* serve_request(void* data){
+  	
+  	while(1){
+  		int newsockfd;
+  		pthread_mutex_lock(&mutex);
+		while(current_count==0){
+		// sleep worker waiting for a filled slot
+			pthread_cond_wait(&filled, &mutex);
+		}
+		consume_ptr=(consume_ptr+1)%MAX;
+		newsockfd=client_buffer[consume_ptr];
+		current_count--;
+		// up mutex 
+		pthread_mutex_unlock(&mutex);
+		while(1){
+		// int* newsockfd=(int*) data;
+			int status;
+			char buffer[1024] = {0};
+			status = read(newsockfd,buffer,1024);
+			if (status < 0) {
+				error("error! reading from socket\n");
+			}
+			// cout<<"Here is the message: "<<buffer<<endl;
+			string ret_val;
+			stringstream ss(buffer);
+	        vector<string> tokens{istream_iterator<string>{ss},
+	                  istream_iterator<string>{}};
+	        pthread_mutex_lock(&mutex);
+	        if(tokens.front().compare("create")==0){
+	        	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[3]);
+
+	        }else if(tokens.front().compare("read")==0){
+	        	ret_val=get_val_from_key(KV_pair,stoi(tokens[1]));
+
+	        }else if(tokens.front().compare("update")==0){
+	        	ret_val=update_value_for_key(KV_pair,stoi(tokens[1]),tokens[3]);
+
+	        }else if(tokens.front().compare("delete")==0){
+	        	ret_val=delete_key(KV_pair,stoi(tokens[1]));
+	        }else if(tokens.front().compare("disconnect")==0){
+	        	close(newsockfd);
+	        	pthread_mutex_unlock(&mutex);
+	        	break;
+	        }
+	        pthread_mutex_unlock(&mutex);
+			cout<<"writing to socket\n";
+			status = write(newsockfd,ret_val.c_str(),ret_val.length());
+			
+			if (status < 0) error("error! writing to socket\n");
+		}
+		cout<<"disconnected "<<newsockfd<<endl;
+		pthread_cond_signal(&empty); //signaling for the case client gets disconnected
+  	}
+	
 }
 
 
 int main(int argc, char const *argv[])
 {
 	/* code */
-	int sockfd, newsockfd, portno, clilen;
-	struct sockaddr_in serv_addr, cli_addr;
-	pthread_t workers[NO_OF_WORKERS];
-	char buffer[1024] = {0}; 
+	
+	pthread_t workers[NO_OF_WORKERS],prod_thread;
 	
 	int status=0;
 	cout<<"1"<<endl;
@@ -146,28 +192,26 @@ int main(int argc, char const *argv[])
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	portno = atoi(argv[2]);
+	string serverip = argv[1];
 	serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_addr.s_addr = inet_addr(serverip.c_str());
     serv_addr.sin_port = htons(portno);
     cout<<"2"<<endl;
     if (bind(sockfd, (struct sockaddr *) &serv_addr,
               sizeof(serv_addr)) < 0) 
-              error("ERROR on binding");
+              error("error! on binding\n");
     listen(sockfd,NO_OF_WORKERS);
     clilen = sizeof(cli_addr);
 	// bzero(buffer,256);
-	while(1){
-		for(int threadNo=0;threadNo<NO_OF_WORKERS;threadNo++){
-			int newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, (socklen_t*) &clilen);
-			cout<<"accepted connection "<<newsockfd<<endl;
-			if (newsockfd < 0) 
-			  error("ERROR on accept");
-			struct thread_data *thread_data_curr=(struct thread_data*)malloc(sizeof(struct thread_data));
-			thread_data_curr->sock_id=newsockfd;
-			pthread_create(&workers[threadNo], NULL, serve_request, (void *)thread_data_curr);				
-		}
-		
+    pthread_create(&prod_thread, NULL, add_client_to_queue, NULL);
+
+    // creating worker threads
+    for(int threadNo=0;threadNo<NO_OF_WORKERS;threadNo++){
+		pthread_create(&workers[threadNo], NULL, serve_request, NULL);				
 	}
+
+	//will never be called
+	pthread_join(prod_thread, NULL);
 	for(int threadNo=0;threadNo<NO_OF_WORKERS;threadNo++){
 		pthread_join(threadNo, NULL);		
 	}
