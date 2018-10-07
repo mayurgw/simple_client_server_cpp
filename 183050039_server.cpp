@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <string>
+#include <string.h>
 #include <sstream>
 #include <map>
 #include <iterator>
@@ -133,18 +134,45 @@ void* serve_request(void* data){
 		// up mutex 
 		pthread_mutex_unlock(&mutex);
 		while(1){
-		// int* newsockfd=(int*) data;
 			int status;
-			char buffer[1024] = {0};
-			status = read(newsockfd,buffer,1024);
+			// char buffer[10] = {0};
+			// status = read(newsockfd,buffer,10);
+			int maxbuff=256;
+			
+
+			string buffer="";
+			int readlength=0;
+			int total_read_length=0;
+			int total_inp_length=1;
+			//logic to handle high sized input
+			while(total_read_length<total_inp_length){
+				// buffer_parts[maxbuff] = {'\0'};
+				char buffer_parts[maxbuff] = {0};
+				// bzero(buffer_parts,maxbuff);
+				status = read(newsockfd,buffer_parts,maxbuff-1);
+				if(readlength==0){
+					stringstream ss_curr(buffer_parts);
+			        vector<string> tokens_curr{istream_iterator<string>{ss_curr},
+			                  istream_iterator<string>{}};
+			        total_inp_length=stoi(tokens_curr[0]);
+			        cout<<total_inp_length<<endl;
+			        readlength=1;    
+				}
+				total_read_length+=status;
+				if(status<=0){
+					break;
+				}
+				string buffer_curr (buffer_parts);
+				buffer.append(buffer_curr);
+			}
 			if (status < 0) {
 				error("error! reading from socket\n");
 			}
-			// cout<<"Here is the message: "<<buffer<<endl;
 			string ret_val;
 			stringstream ss(buffer);
 	        vector<string> tokens{istream_iterator<string>{ss},
 	                  istream_iterator<string>{}};
+	        tokens.erase(tokens.begin());
 	        pthread_mutex_lock(&mutex);
 	        if(tokens.front().compare("create")==0){
 	        	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[3]);
@@ -163,7 +191,7 @@ void* serve_request(void* data){
 	        	break;
 	        }
 	        pthread_mutex_unlock(&mutex);
-			cout<<"writing to socket\n";
+			cout<<"writing to socket "<<ret_val<<endl;
 			status = write(newsockfd,ret_val.c_str(),ret_val.length());
 			
 			if (status < 0) error("error! writing to socket\n");

@@ -70,29 +70,36 @@ void perform_actions(string inp_buff){
         connect_to_server(tokens[1],stoi(tokens[2]));
     }else{
         if(is_connected_to_server){
+            int inp_buff_len=inp_buff.length();
+            string buff_prepend=to_string(inp_buff_len);
+            inp_buff_len+=buff_prepend.length();//adding the length of digits also
+            inp_buff_len+=1;//for space
+            buff_prepend=to_string(inp_buff_len);
+            buff_prepend.append(" ");
+            inp_buff.insert (0,buff_prepend);
             if(tokens.front().compare("disconnect")==0){
                 
                 int n = write(sockfd,inp_buff.c_str(),inp_buff.length());
                 if (n < 0) 
-                     error("ERROR disconnecting from socket\n");
+                     error("error! disconnecting from socket\n");
                 cout<<"disconnected\n";
                 disconnect();
             }else if(tokens.front().compare("create")==0 || tokens.front().compare("read")==0 ||tokens.front().compare("update")==0||tokens.front().compare("delete")==0){
                 int n = write(sockfd,inp_buff.c_str(),inp_buff.length());
                 if (n < 0) 
-                     error("ERROR writing from socket\n");
+                     error("error! writing from socket\n");
                 cout<<"written\n";
                 char buffer[256]={0};
                 n = read(sockfd,buffer,255);
                 if (n < 0) 
-                     error("ERROR reading from socket\n");
+                     error("error! reading from socket\n");
                 cout<<buffer<<endl;
                 cout<<"read\n";
             }else{
                 cout<<"invalid command\n";
             }  
         }else{
-            cout<<"Not connected to server\n";
+            cout<<"error! Not connected to server\n";
         } 
     } 
 }
@@ -119,6 +126,7 @@ void batch_mode(string filename){
     string line;
     while (getline(infile, line))
     {
+        // cout<<"perform_actions";
         perform_actions(line);
         // process pair (a,b)
     }
@@ -134,7 +142,7 @@ void signalHandler( int signum ) {
         string inp_buff="disconnect";
         int n = write(sockfd,inp_buff.c_str(),inp_buff.length());
         if (n < 0) 
-             error("ERROR disconnecting from socket\n");
+             error("error! disconnecting from socket\n");
         disconnect();
    } 
   
