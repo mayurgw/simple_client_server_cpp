@@ -6,12 +6,26 @@
 #include <iterator>
 #include <vector>
 
+#include <errno.h>
+#include <signal.h>
+#include <wait.h>
+#include <pthread.h>
+
 #include <unistd.h>
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
 
 using namespace std;
+
+#define NO_OF_WORKERS 3
+
+pthread_mutex_t mutex;
+map<int,string> KV_pair;
+
+struct thread_data {
+    int sock_id;
+};
 
 void fill_map(map<int, string> &temp_map){
 	temp_map.insert ( std::pair<int,string>(10,"ten") );
@@ -67,13 +81,60 @@ void error(string msg)
     cout<<msg<<endl;
 }
 
+
+void* serve_request(void* data){
+	struct thread_data *args=(struct thread_data*)data;
+  	int newsockfd = args->sock_id;
+  	cout<<newsockfd<<endl;
+  	cout<<"reached here\n";
+	while(1){
+		// int* newsockfd=(int*) data;
+		int status;
+		char buffer[1024] = {0};
+		status = read(newsockfd,buffer,1024);
+		if (status < 0) {
+			error("ERROR reading from socket");
+		}
+		// cout<<"Here is the message: "<<buffer<<endl;
+		string ret_val;
+		stringstream ss(buffer);
+        vector<string> tokens{istream_iterator<string>{ss},
+                  istream_iterator<string>{}};
+        pthread_mutex_lock(&mutex);
+        if(tokens.front().compare("create")==0){
+        	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[3]);
+
+        }else if(tokens.front().compare("read")==0){
+        	ret_val=get_val_from_key(KV_pair,stoi(tokens[1]));
+
+        }else if(tokens.front().compare("update")==0){
+        	ret_val=update_value_for_key(KV_pair,stoi(tokens[1]),tokens[3]);
+
+        }else if(tokens.front().compare("delete")==0){
+        	ret_val=delete_key(KV_pair,stoi(tokens[1]));
+        }else if(tokens.front().compare("disconnect")==0){
+        	close(newsockfd);
+        	pthread_mutex_unlock(&mutex);
+        	break;
+        }
+        pthread_mutex_unlock(&mutex);
+		cout<<"writing to socket\n";
+		status = write(newsockfd,ret_val.c_str(),ret_val.length());
+		
+		if (status < 0) error("ERROR writing to socket");
+	}
+	cout<<"disconnected"<<newsockfd<<endl;
+}
+
+
 int main(int argc, char const *argv[])
 {
 	/* code */
 	int sockfd, newsockfd, portno, clilen;
 	struct sockaddr_in serv_addr, cli_addr;
+	pthread_t workers[NO_OF_WORKERS];
 	char buffer[1024] = {0}; 
-	map<int,string> KV_pair;
+	
 	int status=0;
 	cout<<"1"<<endl;
 	fill_map(KV_pair);
@@ -92,48 +153,25 @@ int main(int argc, char const *argv[])
     if (bind(sockfd, (struct sockaddr *) &serv_addr,
               sizeof(serv_addr)) < 0) 
               error("ERROR on binding");
-    listen(sockfd,5);
+    listen(sockfd,NO_OF_WORKERS);
     clilen = sizeof(cli_addr);
 	// bzero(buffer,256);
 	while(1){
-		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, (socklen_t*) &clilen);
-		cout<<"3"<<endl;
-		if (newsockfd < 0) 
-		  error("ERROR on accept");
-		while(1){
-			buffer[1024] = {0};
-			status = read(newsockfd,buffer,1024);
-			if (status < 0) {
-				error("ERROR reading from socket");
-			}
-			cout<<"Here is the message: "<<buffer<<endl;
-			string ret_val;
-			stringstream ss(buffer);
-            vector<string> tokens{istream_iterator<string>{ss},
-                      istream_iterator<string>{}};
-            if(tokens.front().compare("create")==0){
-            	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[3]);
-
-            }else if(tokens.front().compare("read")==0){
-            	ret_val=get_val_from_key(KV_pair,stoi(tokens[1]));
-
-            }else if(tokens.front().compare("update")==0){
-            	ret_val=update_value_for_key(KV_pair,stoi(tokens[1]),tokens[3]);
-
-            }else if(tokens.front().compare("delete")==0){
-            	ret_val=delete_key(KV_pair,stoi(tokens[1]));
-            }else if(tokens.front().compare("disconnect")==0){
-            	close(newsockfd);
-            	break;
-            }
-			
-			status = write(newsockfd,ret_val.c_str(),ret_val.length());
-			cout<<"trying to write on socket\n";
-			if (status < 0) error("ERROR writing to socket");
+		for(int threadNo=0;threadNo<NO_OF_WORKERS;threadNo++){
+			int newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, (socklen_t*) &clilen);
+			cout<<"accepted connection "<<newsockfd<<endl;
+			if (newsockfd < 0) 
+			  error("ERROR on accept");
+			struct thread_data *thread_data_curr=(struct thread_data*)malloc(sizeof(struct thread_data));
+			thread_data_curr->sock_id=newsockfd;
+			pthread_create(&workers[threadNo], NULL, serve_request, (void *)thread_data_curr);				
 		}
-		cout<<"disconnected2"<<endl;
 		
 	}
+	for(int threadNo=0;threadNo<NO_OF_WORKERS;threadNo++){
+		pthread_join(threadNo, NULL);		
+	}
+	
 	
 	// print_map(KV_pair);
 	return 0;
