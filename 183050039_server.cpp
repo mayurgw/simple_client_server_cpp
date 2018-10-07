@@ -186,7 +186,7 @@ int main(int argc, char const *argv[])
 	fill_map(KV_pair);
 	
 	if (argc < 2) {
-         cout<<"ERROR, no port provided\n";
+         cout<<"error! no port provided\n";
          exit(1);
      }
 

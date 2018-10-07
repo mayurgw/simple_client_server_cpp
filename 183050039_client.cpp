@@ -14,6 +14,7 @@
 #include <netdb.h> 
 #include <arpa/inet.h>
 
+#include <csignal>
 
 using namespace std;
 
@@ -24,6 +25,8 @@ void error(string msg)
 {
     cout<<msg;
 }
+
+
 
 void connect_to_server(string server_ip, int server_port){
     if(!is_connected_to_server){
@@ -55,7 +58,7 @@ void connect_to_server(string server_ip, int server_port){
 void disconnect(){
     is_connected_to_server=0;
     int n=close(sockfd);
-    cout<<"closing "<<n<<endl;
+    // cout<<"closing "<<n<<endl;
 }
 
 
@@ -69,13 +72,13 @@ void perform_actions(string inp_buff){
         if(is_connected_to_server){
             if(tokens.front().compare("disconnect")==0){
                 
-                int n = write(sockfd,inp_buff.c_str(),256);
+                int n = write(sockfd,inp_buff.c_str(),inp_buff.length());
                 if (n < 0) 
                      error("ERROR disconnecting from socket\n");
                 cout<<"disconnected\n";
                 disconnect();
             }else if(tokens.front().compare("create")==0 || tokens.front().compare("read")==0 ||tokens.front().compare("update")==0||tokens.front().compare("delete")==0){
-                int n = write(sockfd,inp_buff.c_str(),256);
+                int n = write(sockfd,inp_buff.c_str(),inp_buff.length());
                 if (n < 0) 
                      error("ERROR writing from socket\n");
                 cout<<"written\n";
@@ -122,10 +125,27 @@ void batch_mode(string filename){
 
 }
 
+void signalHandler( int signum ) {
+   // cout << "Interrupt signal (" << signum << ") received.\n";
+
+   // cleanup and close up stuff here  
+   // terminate program 
+   if(is_connected_to_server){
+        string inp_buff="disconnect";
+        int n = write(sockfd,inp_buff.c_str(),inp_buff.length());
+        if (n < 0) 
+             error("ERROR disconnecting from socket\n");
+        disconnect();
+   } 
+  
+   exit(signum);  
+}
+
 int main(int argc, char *argv[])
 {
 
     string filename;
+    signal(SIGINT, signalHandler);  
     if (argc < 2) {
        cout<<"usage "<<argv[0]<<" interactive/batch\n";
        exit(0);
