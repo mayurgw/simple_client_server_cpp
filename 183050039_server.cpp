@@ -112,7 +112,7 @@ int main(int argc, char const *argv[])
             vector<string> tokens{istream_iterator<string>{ss},
                       istream_iterator<string>{}};
             if(tokens.front().compare("create")==0){
-            	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[2]);
+            	ret_val=insert_key(KV_pair,stoi(tokens[1]),tokens[3]);
 
             }else if(tokens.front().compare("read")==0){
             	ret_val=get_val_from_key(KV_pair,stoi(tokens[1]));

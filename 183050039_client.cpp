@@ -124,12 +124,7 @@ void batch_mode(string filename){
 
 int main(int argc, char *argv[])
 {
-//     int sockfd, portno, n;
 
-//     struct sockaddr_in serv_addr;
-//     struct hostent *server;
-
-    // char buffer[256]={0};
     string filename;
     if (argc < 2) {
        cout<<"usage "<<argv[0]<<" interactive/batch\n";
@@ -148,37 +143,10 @@ int main(int argc, char *argv[])
 	       exit(0);
 	    }
 	    filename=argv[2];
+        batch_mode(filename);
     }else{
     	error("invalid mode");
     }
-    // portno = atoi(argv[2]);
-    // sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    // if (sockfd < 0) 
-    //     error("ERROR opening socket");
-    // server = gethostbyname(argv[1]);
-    // if (server == NULL) {
-    //     error("ERROR, no such host\n");
-    //     exit(0);
-    // }
-    // // bzero((char *) &serv_addr, sizeof(serv_addr));
-    // serv_addr.sin_family = AF_INET;
-    // serv_addr.sin_addr.s_addr = INADDR_ANY;
-    // serv_addr.sin_port = htons(portno);
-    // // bcopy((char *)server->h_addr, 
-    // //      (char *)&serv_addr.sin_addr.s_addr,
-    // //      server->h_length);
-    // if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) 
-    //     error("ERROR connecting");
-    // cout<<"Please enter the message: ";
-    // cin>>buffer;
-    // n = write(sockfd,buffer,256);
-    // if (n < 0) 
-    //      error("ERROR writing to socket");
-    // buffer[256]={0};
-    // // bzero(buffer,256);
-    // n = read(sockfd,buffer,255);
-    // if (n < 0) 
-    //      error("ERROR reading from socket");
-    // cout<<buffer<<endl;
+    
     return 0;
 }
